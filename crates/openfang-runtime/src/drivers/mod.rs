@@ -7,9 +7,12 @@
 pub mod anthropic;
 pub mod bedrock;
 pub mod claude_code;
+pub mod codex_cli;
 pub mod copilot;
+pub mod env_filter;
 pub mod fallback;
 pub mod gemini;
+pub mod gemini_cli;
 pub mod openai;
 pub mod qwen_code;
 pub mod vertex;
@@ -340,6 +343,24 @@ pub fn create_driver(config: &DriverConfig) -> Result<Arc<dyn LlmDriver>, LlmErr
         )));
     }
 
+    // Codex CLI (local subprocess) — OpenAI Codex CLI
+    if provider == "codex-local" {
+        let cli_path = config.base_url.clone();
+        return Ok(Arc::new(codex_cli::CodexCliDriver::new(
+            cli_path,
+            config.skip_permissions,
+        )));
+    }
+
+    // Gemini CLI (local subprocess) — Google Gemini CLI
+    if provider == "gemini-local" {
+        let cli_path = config.base_url.clone();
+        return Ok(Arc::new(gemini_cli::GeminiCliDriver::new(
+            cli_path,
+            config.skip_permissions,
+        )));
+    }
+
     // GitHub Copilot — OAuth device flow + OpenAI-compatible completions.
     // Authentication is handled automatically via persisted tokens from the device flow.
     // Run `openfang config set-key github-copilot` to authenticate.
@@ -503,7 +524,7 @@ pub fn create_driver(config: &DriverConfig) -> Result<Arc<dyn LlmDriver>, LlmErr
             "Unknown provider '{}'. Supported: anthropic, gemini, openai, azure, bedrock, groq, \
              openrouter, deepseek, together, mistral, fireworks, ollama, vllm, lmstudio, \
              perplexity, cohere, ai21, cerebras, sambanova, huggingface, xai, replicate, \
-             github-copilot, chutes, venice, nvidia, codex, claude-code. \
+             github-copilot, chutes, venice, nvidia, codex, claude-code, codex-local, gemini-local. \
              Or set base_url for a custom OpenAI-compatible endpoint.",
             provider
         ),
@@ -607,6 +628,8 @@ pub fn known_providers() -> &'static [&'static str] {
         "codex",
         "claude-code",
         "qwen-code",
+        "codex-local",
+        "gemini-local",
         "azure",
     ]
 }
@@ -713,7 +736,7 @@ mod tests {
         assert!(providers.contains(&"claude-code"));
         assert!(providers.contains(&"qwen-code"));
         assert!(providers.contains(&"azure"));
-        assert_eq!(providers.len(), 38);
+        assert_eq!(providers.len(), 40);
     }
 
     #[test]

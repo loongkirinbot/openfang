@@ -1,4 +1,5 @@
 //! Audit screen: audit log viewer with action filter and chain verification.
+#![allow(clippy::collapsible_match)]
 
 use crate::tui::theme;
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};

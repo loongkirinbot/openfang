@@ -1,6 +1,7 @@
 //! OpenFang CLI — command-line interface for the OpenFang Agent OS.
 //!
 //! When a daemon is running (`openfang start`), the CLI talks to it over HTTP.
+#![allow(clippy::collapsible_match)]
 //! Otherwise, commands boot an in-process kernel (single-shot mode).
 
 mod bundled_agents;

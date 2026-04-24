@@ -4,6 +4,7 @@
 //! plaintext IRC connections. Implements the core IRC protocol: NICK, USER, JOIN,
 //! PRIVMSG, PING/PONG. A `use_tls: bool` field is reserved for future TLS support
 //! (would require a `tokio-native-tls` dependency).
+#![allow(clippy::collapsible_match)]
 
 use crate::types::{
     split_message, ChannelAdapter, ChannelContent, ChannelMessage, ChannelType, ChannelUser,

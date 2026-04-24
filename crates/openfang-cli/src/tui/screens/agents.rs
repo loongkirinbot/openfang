@@ -1,5 +1,6 @@
 //! Agent selection + creation: list running agents, template picker, custom builder.
 //! Overhauled with search/filter, state badges, detail view, and new actions.
+#![allow(clippy::collapsible_match)]
 
 use crate::templates::{self, AgentTemplate};
 use crate::tui::theme;

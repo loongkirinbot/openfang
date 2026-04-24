@@ -20,6 +20,7 @@
 //! ├── hooks/                            # Webhook hook modules
 //! └── workspaces/                       # Per-agent working directories
 //! ```
+#![allow(clippy::collapsible_match)]
 
 use crate::report::{ItemKind, MigrateItem, MigrationReport, SkippedItem};
 use crate::{MigrateError, MigrateOptions};

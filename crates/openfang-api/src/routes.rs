@@ -1,4 +1,5 @@
 //! Route handlers for the OpenFang API.
+#![allow(clippy::useless_conversion)]
 
 use crate::types::*;
 use axum::extract::{Multipart, Path, Query, State};

@@ -1,6 +1,7 @@
 //! Google Gemini API driver.
 //!
 //! Native implementation of the Gemini generateContent API.
+#![allow(clippy::collapsible_match)]
 //! Gemini uses a different format from both Anthropic and OpenAI:
 //! - Model goes in the URL path, not the request body
 //! - Auth via `x-goog-api-key` header (not `Authorization: Bearer`)

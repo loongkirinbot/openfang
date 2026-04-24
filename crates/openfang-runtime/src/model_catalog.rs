@@ -74,6 +74,22 @@ impl ModelCatalog {
                 };
                 continue;
             }
+            if provider.id == "codex-local" {
+                provider.auth_status = if crate::drivers::codex_cli::codex_cli_available() {
+                    AuthStatus::Configured
+                } else {
+                    AuthStatus::Missing
+                };
+                continue;
+            }
+            if provider.id == "gemini-local" {
+                provider.auth_status = if crate::drivers::gemini_cli::gemini_cli_available() {
+                    AuthStatus::Configured
+                } else {
+                    AuthStatus::Missing
+                };
+                continue;
+            }
 
             // GitHub Copilot: check for persisted OAuth tokens
             if provider.id == "github-copilot" || provider.id == "copilot" {
@@ -925,6 +941,26 @@ fn builtin_providers() -> Vec<ProviderInfo> {
         ProviderInfo {
             id: "qwen-code".into(),
             display_name: "Qwen Code".into(),
+            api_key_env: String::new(),
+            base_url: String::new(),
+            key_required: false,
+            auth_status: AuthStatus::NotRequired,
+            model_count: 0,
+        },
+        // ── Codex CLI (local) ─────────────────────────────────────
+        ProviderInfo {
+            id: "codex-local".into(),
+            display_name: "Codex CLI".into(),
+            api_key_env: String::new(),
+            base_url: String::new(),
+            key_required: false,
+            auth_status: AuthStatus::NotRequired,
+            model_count: 0,
+        },
+        // ── Gemini CLI (local) ─────────────────────────────────────
+        ProviderInfo {
+            id: "gemini-local".into(),
+            display_name: "Gemini CLI".into(),
             api_key_env: String::new(),
             base_url: String::new(),
             key_required: false,
@@ -3759,6 +3795,236 @@ fn builtin_models() -> Vec<ModelCatalogEntry> {
             aliases: vec!["qwq".into()],
         },
         // ══════════════════════════════════════════════════════════════
+        // Codex CLI — local (10)
+        // ══════════════════════════════════════════════════════════════
+        ModelCatalogEntry {
+            id: "gpt-5.4".into(),
+            display_name: "GPT-5.4".into(),
+            provider: "codex-local".into(),
+            tier: ModelTier::Frontier,
+            context_window: 200_000,
+            max_output_tokens: 100_000,
+            input_cost_per_m: 0.0,
+            output_cost_per_m: 0.0,
+            supports_tools: true,
+            supports_vision: false,
+            supports_streaming: true,
+            aliases: vec![],
+        },
+        ModelCatalogEntry {
+            id: "gpt-5.3-codex".into(),
+            display_name: "GPT-5.3 Codex".into(),
+            provider: "codex-local".into(),
+            tier: ModelTier::Smart,
+            context_window: 200_000,
+            max_output_tokens: 100_000,
+            input_cost_per_m: 0.0,
+            output_cost_per_m: 0.0,
+            supports_tools: true,
+            supports_vision: false,
+            supports_streaming: true,
+            aliases: vec![],
+        },
+        ModelCatalogEntry {
+            id: "gpt-5.3-codex-spark".into(),
+            display_name: "GPT-5.3 Codex Spark".into(),
+            provider: "codex-local".into(),
+            tier: ModelTier::Smart,
+            context_window: 200_000,
+            max_output_tokens: 100_000,
+            input_cost_per_m: 0.0,
+            output_cost_per_m: 0.0,
+            supports_tools: true,
+            supports_vision: false,
+            supports_streaming: true,
+            aliases: vec![],
+        },
+        ModelCatalogEntry {
+            id: "gpt-5".into(),
+            display_name: "GPT-5".into(),
+            provider: "codex-local".into(),
+            tier: ModelTier::Smart,
+            context_window: 200_000,
+            max_output_tokens: 100_000,
+            input_cost_per_m: 0.0,
+            output_cost_per_m: 0.0,
+            supports_tools: true,
+            supports_vision: false,
+            supports_streaming: true,
+            aliases: vec![],
+        },
+        ModelCatalogEntry {
+            id: "o3".into(),
+            display_name: "o3".into(),
+            provider: "codex-local".into(),
+            tier: ModelTier::Frontier,
+            context_window: 200_000,
+            max_output_tokens: 100_000,
+            input_cost_per_m: 0.0,
+            output_cost_per_m: 0.0,
+            supports_tools: true,
+            supports_vision: false,
+            supports_streaming: true,
+            aliases: vec![],
+        },
+        ModelCatalogEntry {
+            id: "o4-mini".into(),
+            display_name: "o4-mini".into(),
+            provider: "codex-local".into(),
+            tier: ModelTier::Fast,
+            context_window: 100_000,
+            max_output_tokens: 50_000,
+            input_cost_per_m: 0.0,
+            output_cost_per_m: 0.0,
+            supports_tools: true,
+            supports_vision: false,
+            supports_streaming: true,
+            aliases: vec![],
+        },
+        ModelCatalogEntry {
+            id: "gpt-5-mini".into(),
+            display_name: "GPT-5 mini".into(),
+            provider: "codex-local".into(),
+            tier: ModelTier::Balanced,
+            context_window: 128_000,
+            max_output_tokens: 64_000,
+            input_cost_per_m: 0.0,
+            output_cost_per_m: 0.0,
+            supports_tools: true,
+            supports_vision: false,
+            supports_streaming: true,
+            aliases: vec![],
+        },
+        ModelCatalogEntry {
+            id: "gpt-5-nano".into(),
+            display_name: "GPT-5 nano".into(),
+            provider: "codex-local".into(),
+            tier: ModelTier::Fast,
+            context_window: 64_000,
+            max_output_tokens: 32_000,
+            input_cost_per_m: 0.0,
+            output_cost_per_m: 0.0,
+            supports_tools: true,
+            supports_vision: false,
+            supports_streaming: true,
+            aliases: vec![],
+        },
+        ModelCatalogEntry {
+            id: "o3-mini".into(),
+            display_name: "o3-mini".into(),
+            provider: "codex-local".into(),
+            tier: ModelTier::Fast,
+            context_window: 100_000,
+            max_output_tokens: 50_000,
+            input_cost_per_m: 0.0,
+            output_cost_per_m: 0.0,
+            supports_tools: true,
+            supports_vision: false,
+            supports_streaming: true,
+            aliases: vec![],
+        },
+        ModelCatalogEntry {
+            id: "codex-mini-latest".into(),
+            display_name: "Codex Mini".into(),
+            provider: "codex-local".into(),
+            tier: ModelTier::Fast,
+            context_window: 64_000,
+            max_output_tokens: 32_000,
+            input_cost_per_m: 0.0,
+            output_cost_per_m: 0.0,
+            supports_tools: true,
+            supports_vision: false,
+            supports_streaming: true,
+            aliases: vec![],
+        },
+        // ══════════════════════════════════════════════════════════════
+        // Gemini CLI — local (6)
+        // ══════════════════════════════════════════════════════════════
+        ModelCatalogEntry {
+            id: "auto".into(),
+            display_name: "Gemini Auto".into(),
+            provider: "gemini-local".into(),
+            tier: ModelTier::Balanced,
+            context_window: 1_000_000,
+            max_output_tokens: 65_000,
+            input_cost_per_m: 0.0,
+            output_cost_per_m: 0.0,
+            supports_tools: false,
+            supports_vision: true,
+            supports_streaming: true,
+            aliases: vec![],
+        },
+        ModelCatalogEntry {
+            id: "gemini-2.5-pro".into(),
+            display_name: "Gemini 2.5 Pro".into(),
+            provider: "gemini-local".into(),
+            tier: ModelTier::Frontier,
+            context_window: 1_000_000,
+            max_output_tokens: 65_000,
+            input_cost_per_m: 0.0,
+            output_cost_per_m: 0.0,
+            supports_tools: false,
+            supports_vision: true,
+            supports_streaming: true,
+            aliases: vec![],
+        },
+        ModelCatalogEntry {
+            id: "gemini-2.5-flash".into(),
+            display_name: "Gemini 2.5 Flash".into(),
+            provider: "gemini-local".into(),
+            tier: ModelTier::Balanced,
+            context_window: 1_000_000,
+            max_output_tokens: 65_000,
+            input_cost_per_m: 0.0,
+            output_cost_per_m: 0.0,
+            supports_tools: false,
+            supports_vision: true,
+            supports_streaming: true,
+            aliases: vec![],
+        },
+        ModelCatalogEntry {
+            id: "gemini-2.5-flash-lite".into(),
+            display_name: "Gemini 2.5 Flash Lite".into(),
+            provider: "gemini-local".into(),
+            tier: ModelTier::Fast,
+            context_window: 1_000_000,
+            max_output_tokens: 65_000,
+            input_cost_per_m: 0.0,
+            output_cost_per_m: 0.0,
+            supports_tools: false,
+            supports_vision: true,
+            supports_streaming: true,
+            aliases: vec![],
+        },
+        ModelCatalogEntry {
+            id: "gemini-2.0-flash".into(),
+            display_name: "Gemini 2.0 Flash".into(),
+            provider: "gemini-local".into(),
+            tier: ModelTier::Balanced,
+            context_window: 1_000_000,
+            max_output_tokens: 65_000,
+            input_cost_per_m: 0.0,
+            output_cost_per_m: 0.0,
+            supports_tools: false,
+            supports_vision: true,
+            supports_streaming: true,
+            aliases: vec![],
+        },
+        ModelCatalogEntry {
+            id: "gemini-2.0-flash-lite".into(),
+            display_name: "Gemini 2.0 Flash Lite".into(),
+            provider: "gemini-local".into(),
+            tier: ModelTier::Fast,
+            context_window: 1_000_000,
+            max_output_tokens: 65_000,
+            input_cost_per_m: 0.0,
+            output_cost_per_m: 0.0,
+            supports_tools: false,
+            supports_vision: true,
+            supports_streaming: true,
+            aliases: vec![],
+        },
+        // ══════════════════════════════════════════════════════════════
         // Chutes.ai (5)
         // ══════════════════════════════════════════════════════════════
         ModelCatalogEntry {
@@ -3892,7 +4158,7 @@ mod tests {
     #[test]
     fn test_catalog_has_providers() {
         let catalog = ModelCatalog::new();
-        assert_eq!(catalog.list_providers().len(), 41);
+        assert_eq!(catalog.list_providers().len(), 43);
     }
 
     #[test]

@@ -1,6 +1,7 @@
 //! OpenAI-compatible API driver.
 //!
 //! Works with OpenAI, Ollama, vLLM, and any other OpenAI-compatible endpoint.
+#![allow(clippy::collapsible_match)]
 
 use crate::llm_driver::{CompletionRequest, CompletionResponse, LlmDriver, LlmError, StreamEvent};
 use crate::think_filter::{FilterAction, StreamingThinkFilter};

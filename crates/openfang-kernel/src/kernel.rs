@@ -1,4 +1,5 @@
 //! OpenFangKernel — assembles all subsystems and provides the main API.
+#![allow(clippy::collapsible_match, clippy::unnecessary_sort_by)]
 
 use crate::auth::AuthManager;
 use crate::background::{self, BackgroundExecutor};

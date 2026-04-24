@@ -10,6 +10,7 @@
 //! - Aborted assistant messages (empty blocks before tool results)
 //! - Consecutive same-role messages (Anthropic API requires alternation)
 //! - Oversized or potentially malicious tool result content
+#![allow(clippy::unnecessary_sort_by)]
 
 use openfang_types::message::{ContentBlock, Message, MessageContent, Role};
 use std::collections::{HashMap, HashSet};

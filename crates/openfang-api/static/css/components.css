@@ -289,12 +289,14 @@ tr:hover td { background: var(--surface2); }
   flex: 1;
   min-height: 0;
   overflow: hidden;
+  padding-bottom: 65px;
 }
 
 .messages {
   flex: 1;
   overflow-y: auto;
   padding: 20px 24px;
+  padding-bottom: 65px;
   scroll-behavior: smooth;
   overscroll-behavior: contain;
 }

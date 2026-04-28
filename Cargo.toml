@@ -14,7 +14,7 @@ members = [
     "crates/openfang-desktop",
     "crates/openfang-hands",
     "crates/openfang-extensions",
-    "xtask", "target/release/hello-project",
+    "xtask",
 ]
 
 [workspace.package]

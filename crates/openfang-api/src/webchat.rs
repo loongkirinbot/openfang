@@ -30,6 +30,9 @@ const LOGO_PNG: &[u8] = include_bytes!("../static/logo.png");
 /// Embedded favicon ICO for browser tabs.
 const FAVICON_ICO: &[u8] = include_bytes!("../static/favicon.ico");
 
+/// Embedded gongan PNG for ICP备案 display.
+const GONGAN_PNG: &[u8] = include_bytes!("../static/gongan.png");
+
 /// GET /logo.png — Serve the OpenFang logo.
 pub async fn logo_png() -> impl IntoResponse {
     (
@@ -49,6 +52,17 @@ pub async fn favicon_ico() -> impl IntoResponse {
             (header::CACHE_CONTROL, "public, max-age=86400, immutable"),
         ],
         FAVICON_ICO,
+    )
+}
+
+/// GET /gongan.png — Serve the gongan badge image.
+pub async fn gongan_png() -> impl IntoResponse {
+    (
+        [
+            (header::CONTENT_TYPE, "image/png"),
+            (header::CACHE_CONTROL, "public, max-age=86400, immutable"),
+        ],
+        GONGAN_PNG,
     )
 }
 

@@ -482,6 +482,15 @@ pub struct FallbackProviderConfig {
     /// Base URL override (uses catalog default if None).
     #[serde(default)]
     pub base_url: Option<String>,
+    /// Per-message subprocess turn timeout in seconds for this fallback.
+    ///
+    /// Forwarded to `DriverConfig.subprocess_timeout_secs` when this fallback
+    /// is constructed. Currently honored only by `provider = "claude-code"`;
+    /// other providers accept the field for forward-compatibility but ignore
+    /// it today. The `OPENFANG_SUBPROCESS_TIMEOUT_SECS` env var, if set, wins
+    /// over this field at driver-construction time.
+    #[serde(default)]
+    pub subprocess_timeout_secs: Option<u64>,
 }
 
 /// Text-to-speech configuration.
@@ -733,16 +742,32 @@ pub struct AgentBinding {
 }
 
 /// Match rule for agent bindings. All specified (non-None) fields must match.
+///
+/// `#[serde(deny_unknown_fields)]` is intentional: a typo like `channnel_id` or
+/// `chan_id` would otherwise be silently dropped, producing a wide-open binding
+/// that matches every message. Failing loudly at config load is the safer default.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct BindingMatchRule {
     /// Channel type (e.g., "discord", "telegram", "slack").
+    #[serde(default)]
     pub channel: Option<String>,
     /// Specific account/bot ID within the channel.
+    #[serde(default)]
     pub account_id: Option<String>,
     /// Peer/user ID for DM routing.
+    #[serde(default)]
     pub peer_id: Option<String>,
     /// Guild/server ID (Discord/Slack).
+    #[serde(default)]
     pub guild_id: Option<String>,
+    /// Channel/conversation ID — the per-channel routing dimension.
+    /// On Discord this is the channel/thread ID; on Slack it is the conversation
+    /// ID (`C…`/`D…`/`G…`); on Telegram it is the chat ID; on IRC it is the
+    /// channel name. Bridges populate this from the message's channel/conversation
+    /// identifier so bindings can route by room independent of which user posted.
+    #[serde(default)]
+    pub channel_id: Option<String>,
     /// Role-based routing (user must have at least one).
     #[serde(default)]
     pub roles: Vec<String>,
@@ -751,9 +776,15 @@ pub struct BindingMatchRule {
 impl BindingMatchRule {
     /// Calculate specificity score for binding priority ordering.
     /// Higher = more specific = checked first.
+    ///
+    /// Weights: peer_id and channel_id are both 8 so a binding that combines
+    /// both (a specific user in a specific room) cleanly outranks either alone.
     pub fn specificity(&self) -> u32 {
         let mut score = 0u32;
         if self.peer_id.is_some() {
+            score += 8;
+        }
+        if self.channel_id.is_some() {
             score += 8;
         }
         if self.guild_id.is_some() {
@@ -858,7 +889,7 @@ pub enum ExecSecurityMode {
 }
 
 /// Shell/exec security policy.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct ExecPolicy {
     /// Security mode: "deny" blocks all, "allowlist" only allows listed,
@@ -1562,6 +1593,15 @@ pub struct DefaultModelConfig {
     pub api_key_env: String,
     /// Optional base URL override.
     pub base_url: Option<String>,
+    /// Per-message subprocess turn timeout in seconds for the default model.
+    ///
+    /// Forwarded to `DriverConfig.subprocess_timeout_secs` when the primary
+    /// driver is constructed. Currently honored only by
+    /// `provider = "claude-code"`; other providers accept the field for
+    /// forward-compatibility but ignore it today. The
+    /// `OPENFANG_SUBPROCESS_TIMEOUT_SECS` env var, if set, wins over this
+    /// field at driver-construction time.
+    pub subprocess_timeout_secs: Option<u64>,
 }
 
 impl Default for DefaultModelConfig {
@@ -1571,6 +1611,7 @@ impl Default for DefaultModelConfig {
             model: "claude-sonnet-4-20250514".to_string(),
             api_key_env: "ANTHROPIC_API_KEY".to_string(),
             base_url: None,
+            subprocess_timeout_secs: None,
         }
     }
 }
@@ -4038,6 +4079,7 @@ mod tests {
             model: "llama3.2:latest".to_string(),
             api_key_env: String::new(),
             base_url: None,
+            subprocess_timeout_secs: None,
         };
         let json = serde_json::to_string(&fb).unwrap();
         let back: FallbackProviderConfig = serde_json::from_str(&json).unwrap();
@@ -4045,6 +4087,7 @@ mod tests {
         assert_eq!(back.model, "llama3.2:latest");
         assert!(back.api_key_env.is_empty());
         assert!(back.base_url.is_none());
+        assert!(back.subprocess_timeout_secs.is_none());
     }
 
     #[test]
@@ -4069,6 +4112,57 @@ mod tests {
         assert_eq!(config.fallback_providers.len(), 2);
         assert_eq!(config.fallback_providers[0].provider, "ollama");
         assert_eq!(config.fallback_providers[1].provider, "groq");
+    }
+
+    /// `subprocess_timeout_secs` round-trips through TOML on both
+    /// `[default_model]` and `[[fallback_providers]]`. This is the contract
+    /// the kernel relies on to honor operator-set timeouts at driver
+    /// construction time.
+    #[test]
+    fn test_subprocess_timeout_secs_in_toml() {
+        let toml_str = r#"
+            [default_model]
+            provider = "claude-code"
+            model = "claude-sonnet-4-20250514"
+            api_key_env = "ANTHROPIC_API_KEY"
+            subprocess_timeout_secs = 600
+
+            [[fallback_providers]]
+            provider = "claude-code"
+            model = "claude-haiku-4-20250514"
+            subprocess_timeout_secs = 180
+
+            [[fallback_providers]]
+            provider = "ollama"
+            model = "llama3.2:latest"
+        "#;
+        let config: KernelConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.default_model.subprocess_timeout_secs, Some(600));
+        assert_eq!(
+            config.fallback_providers[0].subprocess_timeout_secs,
+            Some(180)
+        );
+        // Omitted on the second fallback → None (backward compat).
+        assert_eq!(config.fallback_providers[1].subprocess_timeout_secs, None);
+    }
+
+    /// Configs that predate this field must still parse cleanly — ensures
+    /// the rollout doesn't break anyone with an existing config.toml.
+    #[test]
+    fn test_subprocess_timeout_secs_omitted_defaults_to_none() {
+        let toml_str = r#"
+            [default_model]
+            provider = "anthropic"
+            model = "claude-sonnet-4-20250514"
+            api_key_env = "ANTHROPIC_API_KEY"
+
+            [[fallback_providers]]
+            provider = "ollama"
+            model = "llama3.2:latest"
+        "#;
+        let config: KernelConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.default_model.subprocess_timeout_secs, None);
+        assert_eq!(config.fallback_providers[0].subprocess_timeout_secs, None);
     }
 
     #[test]

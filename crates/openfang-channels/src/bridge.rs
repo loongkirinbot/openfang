@@ -421,6 +421,26 @@ impl BridgeManager {
         adapter: Arc<dyn ChannelAdapter>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let stream = adapter.start().await?;
+
+        // Migration note for Discord/Slack: prior versions keyed `/agent <name>`
+        // selections on the channel ID rather than the user. `user_defaults` is
+        // in-memory only, so the daemon restart that loads this binary already
+        // wipes any stale entries — but log a one-line nudge so users know to
+        // re-run `/agent <name>` if their previous selection appears to have
+        // gone away. See `set_user_default` call sites in `dispatch_message`
+        // and `handle_command` for the keying fix.
+        match adapter.name() {
+            "discord" | "slack" => {
+                info!(
+                    adapter = adapter.name(),
+                    "Channel adapter starting: per-user `/agent <name>` defaults are \
+                     in-memory and reset on daemon restart. If a previous selection \
+                     no longer takes effect, re-run `/agent <name>` once."
+                );
+            }
+            _ => {}
+        }
+
         let handle = self.handle.clone();
         let router = self.router.clone();
         let rate_limiter = self.rate_limiter.clone();
@@ -659,6 +679,34 @@ fn sender_user_id(message: &ChannelMessage) -> &str {
         .unwrap_or(&message.sender.platform_id)
 }
 
+/// Extract the channel/conversation ID from a message, for bindings whose
+/// `match_rule.channel_id` is set.
+///
+/// On Discord and Slack, `sender.platform_id` already holds the channel/
+/// conversation ID (per `discord.rs` and `slack.rs`, where the user ID lives
+/// in metadata under `sender_user_id`). On other adapters where the platform
+/// ID is the user, callers can opt-in by stashing the channel ID under the
+/// `sender_channel_id` metadata key.
+fn sender_channel_id(message: &ChannelMessage) -> Option<&str> {
+    if let Some(v) = message
+        .metadata
+        .get("sender_channel_id")
+        .and_then(|v| v.as_str())
+    {
+        return Some(v);
+    }
+    // On Discord/Slack, the metadata `sender_user_id` is set and differs from
+    // `sender.platform_id` — in that case, platform_id IS the channel ID.
+    let user_in_meta = message
+        .metadata
+        .get("sender_user_id")
+        .and_then(|v| v.as_str());
+    match user_in_meta {
+        Some(uid) if uid != message.sender.platform_id => Some(&message.sender.platform_id),
+        _ => None,
+    }
+}
+
 /// If an error contains "Agent not found", try to re-resolve the channel's default agent
 /// by name (the name stored at bridge startup). Returns `Some(new_id)` on success.
 async fn try_reresolution(
@@ -797,7 +845,15 @@ async fn dispatch_message(
 
     // Handle commands first (early return)
     if let ChannelContent::Command { ref name, ref args } = message.content {
-        let result = handle_command(name, args, handle, router, &message.sender).await;
+        let result = handle_command(
+            name,
+            args,
+            handle,
+            router,
+            &message.sender,
+            sender_user_id(message),
+        )
+        .await;
         send_response(adapter, &message.sender, result, thread_id, output_format).await;
         return;
     }
@@ -881,7 +937,15 @@ async fn dispatch_message(
         };
 
         if is_channel_command(cmd) {
-            let result = handle_command(cmd, &args, handle, router, &message.sender).await;
+            let result = handle_command(
+                cmd,
+                &args,
+                handle,
+                router,
+                &message.sender,
+                sender_user_id(message),
+            )
+            .await;
             send_response(adapter, &message.sender, result, thread_id, output_format).await;
             return;
         }
@@ -889,8 +953,12 @@ async fn dispatch_message(
     }
 
     // Check broadcast routing first
-    if router.has_broadcast(&message.sender.platform_id) {
-        let targets = router.resolve_broadcast(&message.sender.platform_id);
+    // Broadcast lookup is keyed on the user, matching the read path's
+    // sender_user_id() resolution. On Discord/Slack `sender.platform_id` is the
+    // channel ID, so keying on it would collide with channel routing — see the
+    // companion fix on `set_user_default` writes below.
+    if router.has_broadcast(sender_user_id(message)) {
+        let targets = router.resolve_broadcast(sender_user_id(message));
         if !targets.is_empty() {
             // RBAC check applies to broadcast too
             if let Err(denied) = handle
@@ -958,11 +1026,16 @@ async fn dispatch_message(
         }
     }
 
-    // Route to agent (standard path)
-    let agent_id = router.resolve(
+    // Route to agent (standard path).
+    // Use sender_user_id() so user-keyed bindings (peer_id) match for adapters like
+    // Discord/Slack where sender.platform_id is the channel ID, not the user ID.
+    // Pass the channel/conversation ID separately so bindings with `channel_id`
+    // can match (e.g. "messages in Discord channel X → agent Y").
+    let agent_id = router.resolve_with_channel_id(
         &message.channel,
-        &message.sender.platform_id,
+        sender_user_id(message),
         message.sender.openfang_user.as_deref(),
+        sender_channel_id(message),
     );
 
     let agent_id = match agent_id {
@@ -980,8 +1053,10 @@ async fn dispatch_message(
             };
             match fallback {
                 Some(id) => {
-                    // Auto-set this as the user's default so future messages route directly
-                    router.set_user_default(message.sender.platform_id.clone(), id);
+                    // Auto-set this as the user's default so future messages route directly.
+                    // Key on sender_user_id() (not platform_id) so Discord/Slack — where
+                    // platform_id is the channel — store per-user, matching the read path.
+                    router.set_user_default(sender_user_id(message).to_string(), id);
                     id
                 }
                 None => {
@@ -1399,11 +1474,14 @@ async fn dispatch_with_blocks(
     lifecycle_reactions: bool,
     prefix_style: PrefixStyle,
 ) {
-    // Route to agent (same logic as text path)
-    let agent_id = router.resolve(
+    // Route to agent (same logic as text path).
+    // Use sender_user_id() so user-keyed bindings match for Discord/Slack;
+    // pass channel_id so per-room bindings match too.
+    let agent_id = router.resolve_with_channel_id(
         &message.channel,
-        &message.sender.platform_id,
+        sender_user_id(message),
         message.sender.openfang_user.as_deref(),
+        sender_channel_id(message),
     );
 
     let agent_id = match agent_id {
@@ -1420,7 +1498,9 @@ async fn dispatch_with_blocks(
             };
             match fallback {
                 Some(id) => {
-                    router.set_user_default(message.sender.platform_id.clone(), id);
+                    // Key on sender_user_id() (not platform_id) so Discord/Slack — where
+                    // platform_id is the channel — store per-user, matching the read path.
+                    router.set_user_default(sender_user_id(message).to_string(), id);
                     id
                 }
                 None => {
@@ -1609,12 +1689,19 @@ async fn dispatch_with_blocks(
 }
 
 /// Handle a bot command (returns the response text).
+///
+/// `user_id` is the platform user ID (e.g. Discord author ID, Slack user ID).
+/// For adapters that set `sender.platform_id` to the channel/conversation ID
+/// (Discord, Slack), callers must pass `sender_user_id(message)` here so that
+/// per-user agent routing works correctly. For adapters where platform_id is
+/// already the user (CLI, Telegram DM), the two are equivalent.
 async fn handle_command(
     name: &str,
     args: &[String],
     handle: &Arc<dyn ChannelBridgeHandle>,
     router: &Arc<AgentRouter>,
     sender: &ChannelUser,
+    user_id: &str,
 ) -> String {
     // Canonicalise through the unified command registry: aliases resolve to
     // their canonical name and matching is case-insensitive. If the command
@@ -1668,14 +1755,17 @@ async fn handle_command(
             let agent_name = &args[0];
             match handle.find_agent_by_name(agent_name).await {
                 Ok(Some(agent_id)) => {
-                    router.set_user_default(sender.platform_id.clone(), agent_id);
+                    // Key on user_id (the param wired in by the Discord/Slack call sites
+                    // via sender_user_id(message)) — not sender.platform_id, which is the
+                    // channel ID on those adapters. Matches the read-path resolution.
+                    router.set_user_default(user_id.to_string(), agent_id);
                     format!("Now talking to agent: {agent_name}")
                 }
                 Ok(None) => {
                     // Try to spawn it
                     match handle.spawn_agent_by_name(agent_name).await {
                         Ok(agent_id) => {
-                            router.set_user_default(sender.platform_id.clone(), agent_id);
+                            router.set_user_default(user_id.to_string(), agent_id);
                             format!("Spawned and connected to agent: {agent_name}")
                         }
                         Err(e) => {
@@ -1690,7 +1780,7 @@ async fn handle_command(
             // Need to resolve the user's current agent
             let agent_id = router.resolve(
                 &crate::types::ChannelType::CLI,
-                &sender.platform_id,
+                user_id,
                 sender.openfang_user.as_deref(),
             );
             match agent_id {
@@ -1704,7 +1794,7 @@ async fn handle_command(
         "compact" => {
             let agent_id = router.resolve(
                 &crate::types::ChannelType::CLI,
-                &sender.platform_id,
+                user_id,
                 sender.openfang_user.as_deref(),
             );
             match agent_id {
@@ -1718,7 +1808,7 @@ async fn handle_command(
         "model" => {
             let agent_id = router.resolve(
                 &crate::types::ChannelType::CLI,
-                &sender.platform_id,
+                user_id,
                 sender.openfang_user.as_deref(),
             );
             match agent_id {
@@ -1742,7 +1832,7 @@ async fn handle_command(
         "stop" => {
             let agent_id = router.resolve(
                 &crate::types::ChannelType::CLI,
-                &sender.platform_id,
+                user_id,
                 sender.openfang_user.as_deref(),
             );
             match agent_id {
@@ -1756,7 +1846,7 @@ async fn handle_command(
         "usage" => {
             let agent_id = router.resolve(
                 &crate::types::ChannelType::CLI,
-                &sender.platform_id,
+                user_id,
                 sender.openfang_user.as_deref(),
             );
             match agent_id {
@@ -1770,7 +1860,7 @@ async fn handle_command(
         "think" => {
             let agent_id = router.resolve(
                 &crate::types::ChannelType::CLI,
-                &sender.platform_id,
+                user_id,
                 sender.openfang_user.as_deref(),
             );
             match agent_id {
@@ -1939,10 +2029,10 @@ mod tests {
             openfang_user: None,
         };
 
-        let result = handle_command("agents", &[], &handle, &router, &sender).await;
+        let result = handle_command("agents", &[], &handle, &router, &sender, "user1").await;
         assert!(result.contains("coder"));
 
-        let result = handle_command("help", &[], &handle, &router, &sender).await;
+        let result = handle_command("help", &[], &handle, &router, &sender, "user1").await;
         assert!(result.contains("/agents"));
     }
 
@@ -1960,13 +2050,62 @@ mod tests {
         };
 
         // Select existing agent
-        let result =
-            handle_command("agent", &["coder".to_string()], &handle, &router, &sender).await;
+        let result = handle_command(
+            "agent",
+            &["coder".to_string()],
+            &handle,
+            &router,
+            &sender,
+            "user1",
+        )
+        .await;
         assert!(result.contains("Now talking to agent: coder"));
 
         // Verify router was updated
         let resolved = router.resolve(&ChannelType::Telegram, "user1", None);
         assert_eq!(resolved, Some(agent_id));
+    }
+
+    /// Discord/Slack-shaped: sender.platform_id is the *channel* id, user_id is
+    /// the actual user. After /agent <name>, the default must be stored under
+    /// user_id and resolvable by user_id — NOT by the channel id. This is the
+    /// "split-keying" fix the read path has and the write path now matches.
+    #[tokio::test]
+    async fn test_handle_command_agent_select_keys_on_user_id_not_platform_id() {
+        let agent_id = AgentId::new();
+        let handle: Arc<dyn ChannelBridgeHandle> = Arc::new(MockHandle {
+            agents: Mutex::new(vec![(agent_id, "coder".to_string())]),
+        });
+        let router = Arc::new(AgentRouter::new());
+        // Discord-shape: platform_id is the channel, the real user is in user_id.
+        let sender = ChannelUser {
+            platform_id: "channel-123".to_string(),
+            display_name: "Test".to_string(),
+            openfang_user: None,
+        };
+        let user_id = "user-789";
+
+        let result = handle_command(
+            "agent",
+            &["coder".to_string()],
+            &handle,
+            &router,
+            &sender,
+            user_id,
+        )
+        .await;
+        assert!(result.contains("Now talking to agent: coder"));
+
+        // Resolves under the user's id (correct).
+        let by_user = router.resolve(&ChannelType::Discord, user_id, None);
+        assert_eq!(by_user, Some(agent_id), "should resolve by user_id");
+
+        // Does NOT resolve under the channel id (the bug we just fixed).
+        let by_channel = router.resolve(&ChannelType::Discord, "channel-123", None);
+        assert_eq!(
+            by_channel, None,
+            "must NOT resolve by sender.platform_id (channel id)"
+        );
     }
 
     #[tokio::test]
@@ -1982,7 +2121,7 @@ mod tests {
             openfang_user: None,
         };
 
-        let result = handle_command("agent", &[], &handle, &router, &sender).await;
+        let result = handle_command("agent", &[], &handle, &router, &sender, "user1").await;
         assert!(result.contains("Usage: /agent <name>"));
         assert!(result.contains("coder"));
     }

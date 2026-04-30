@@ -149,6 +149,14 @@ const PROVIDERS: &[ProviderInfo] = &[
         hint: "",
     },
     ProviderInfo {
+        name: "minimax",
+        display: "MiniMax",
+        env_var: "MINIMAX_API_KEY",
+        default_model: "MiniMax-M2.7",
+        needs_key: true,
+        hint: "",
+    },
+    ProviderInfo {
         name: "huggingface",
         display: "Hugging Face",
         env_var: "HUGGINGFACE_API_KEY",
@@ -256,6 +264,23 @@ pub enum InitResult {
         launch: LaunchChoice,
     },
     Cancelled,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::PROVIDERS;
+
+    #[test]
+    fn init_wizard_lists_minimax_provider() {
+        let minimax = PROVIDERS.iter().find(|provider| provider.name == "minimax");
+        assert!(
+            minimax.is_some(),
+            "MiniMax should be selectable in openfang init"
+        );
+        let minimax = minimax.unwrap();
+        assert_eq!(minimax.env_var, "MINIMAX_API_KEY");
+        assert_eq!(minimax.default_model, "MiniMax-M2.7");
+    }
 }
 
 // ── Internal state ─────────────────────────────────────────────────────────
@@ -966,16 +991,15 @@ pub fn run() -> InitResult {
                                 state.step = Step::Provider;
                             }
                         }
-                        KeyCode::Enter => {
+                        KeyCode::Enter
                             if matches!(
                                 state.copilot_auth_status,
                                 CopilotAuthStatus::WaitingForUser
-                            ) && !state.copilot_verification_uri.is_empty()
-                            {
-                                let _ = openfang_runtime::drivers::copilot::open_verification_url(
-                                    &state.copilot_verification_uri,
-                                );
-                            }
+                            ) && !state.copilot_verification_uri.is_empty() =>
+                        {
+                            let _ = openfang_runtime::drivers::copilot::open_verification_url(
+                                &state.copilot_verification_uri,
+                            );
                         }
                         _ => {}
                     },
@@ -990,41 +1014,36 @@ pub fn run() -> InitResult {
                                 state.key_test = KeyTestState::Idle;
                                 state.step = Step::Provider;
                             }
-                            KeyCode::Enter => {
+                            KeyCode::Enter
                                 if !state.api_key_input.is_empty()
-                                    && state.key_test == KeyTestState::Idle
-                                {
-                                    if let Some(p) = state.provider() {
-                                        let _ = crate::dotenv::save_env_key(
-                                            p.env_var,
-                                            &state.api_key_input,
-                                        );
-                                    }
-                                    state.key_test = KeyTestState::Testing;
-                                    let provider_name = state
-                                        .provider()
-                                        .map(|p| p.name.to_string())
-                                        .unwrap_or_default();
-                                    let env_var = state
-                                        .provider()
-                                        .map(|p| p.env_var.to_string())
-                                        .unwrap_or_default();
-                                    let tx = test_tx.clone();
-                                    std::thread::spawn(move || {
-                                        let ok = crate::test_api_key(&provider_name, &env_var);
-                                        let _ = tx.send(ok);
-                                    });
+                                    && state.key_test == KeyTestState::Idle =>
+                            {
+                                if let Some(p) = state.provider() {
+                                    let _ = crate::dotenv::save_env_key(
+                                        p.env_var,
+                                        &state.api_key_input,
+                                    );
                                 }
+                                state.key_test = KeyTestState::Testing;
+                                let provider_name = state
+                                    .provider()
+                                    .map(|p| p.name.to_string())
+                                    .unwrap_or_default();
+                                let env_var = state
+                                    .provider()
+                                    .map(|p| p.env_var.to_string())
+                                    .unwrap_or_default();
+                                let tx = test_tx.clone();
+                                std::thread::spawn(move || {
+                                    let ok = crate::test_api_key(&provider_name, &env_var);
+                                    let _ = tx.send(ok);
+                                });
                             }
-                            KeyCode::Char(c) => {
-                                if state.key_test == KeyTestState::Idle {
-                                    state.api_key_input.push(c);
-                                }
+                            KeyCode::Char(c) if state.key_test == KeyTestState::Idle => {
+                                state.api_key_input.push(c);
                             }
-                            KeyCode::Backspace => {
-                                if state.key_test == KeyTestState::Idle {
-                                    state.api_key_input.pop();
-                                }
+                            KeyCode::Backspace if state.key_test == KeyTestState::Idle => {
+                                state.api_key_input.pop();
                             }
                             _ => {}
                         }

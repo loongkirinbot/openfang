@@ -86,6 +86,12 @@ const PROVIDERS: &[ProviderInfo] = &[
         needs_key: true,
     },
     ProviderInfo {
+        name: "minimax",
+        env_var: "MINIMAX_API_KEY",
+        default_model: "MiniMax-M2.7",
+        needs_key: true,
+    },
+    ProviderInfo {
         name: "perplexity",
         env_var: "PERPLEXITY_API_KEY",
         default_model: "sonar-pro",
@@ -322,13 +328,11 @@ impl WizardState {
             KeyCode::Esc => {
                 self.step = WizardStep::Provider;
             }
-            KeyCode::Enter => {
-                if !self.api_key_input.is_empty() {
-                    if let Some(p) = self.selected_provider_info() {
-                        self.model_input = p.default_model.to_string();
-                    }
-                    self.step = WizardStep::Model;
+            KeyCode::Enter if !self.api_key_input.is_empty() => {
+                if let Some(p) = self.selected_provider_info() {
+                    self.model_input = p.default_model.to_string();
                 }
+                self.step = WizardStep::Model;
             }
             KeyCode::Char(c) => {
                 self.api_key_input.push(c);
@@ -687,5 +691,22 @@ fn draw_done(f: &mut Frame, area: Rect, state: &WizardState) {
             theme::dim_style(),
         )]));
         f.render_widget(cont, chunks[1]);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::PROVIDERS;
+
+    #[test]
+    fn wizard_lists_minimax_provider() {
+        let minimax = PROVIDERS.iter().find(|provider| provider.name == "minimax");
+        assert!(
+            minimax.is_some(),
+            "MiniMax should be selectable in wizard provider list"
+        );
+        let minimax = minimax.unwrap();
+        assert_eq!(minimax.env_var, "MINIMAX_API_KEY");
+        assert_eq!(minimax.default_model, "MiniMax-M2.7");
     }
 }

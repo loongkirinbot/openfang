@@ -1454,6 +1454,7 @@ mod tests {
             Message {
                 role: Role::System,
                 content: MessageContent::Text("System prompt here.".to_string()),
+                ..Default::default()
             },
             Message::user("Hi"),
         ];
@@ -1587,6 +1588,7 @@ mod tests {
                         "thought_signature": "sig_xyz789"
                     })),
                 }]),
+                ..Default::default()
             },
             Message {
                 role: Role::User,
@@ -1596,6 +1598,7 @@ mod tests {
                     content: "Results about Rust programming".to_string(),
                     is_error: false,
                 }]),
+                ..Default::default()
             },
         ];
 
@@ -1633,6 +1636,7 @@ mod tests {
                         "thought_signature": "text_sig_abc"
                     })),
                 }]),
+                ..Default::default()
             },
         ];
 
@@ -1704,6 +1708,7 @@ mod tests {
                     input: serde_json::json!({"path": "/tmp/test"}),
                     provider_metadata: None,
                 }]),
+                ..Default::default()
             },
             Message {
                 role: Role::User,
@@ -1713,6 +1718,7 @@ mod tests {
                     content: "file contents".to_string(),
                     is_error: false,
                 }]),
+                ..Default::default()
             },
         ];
 
@@ -1956,6 +1962,7 @@ mod tests {
             Message {
                 role: Role::Assistant,
                 content: MessageContent::Blocks(completion.content),
+                ..Default::default()
             },
             Message {
                 role: Role::User,
@@ -1965,6 +1972,7 @@ mod tests {
                     content: "search results".to_string(),
                     is_error: false,
                 }]),
+                ..Default::default()
             },
         ];
         let (contents, _) = convert_messages(&messages, &None);

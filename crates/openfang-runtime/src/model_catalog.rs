@@ -4349,11 +4349,7 @@ mod tests {
     #[test]
     fn test_catalog_has_providers() {
         let catalog = ModelCatalog::new();
-<<<<<<< HEAD
-        assert_eq!(catalog.list_providers().len(), 43);
-=======
-        assert_eq!(catalog.list_providers().len(), 42);
->>>>>>> main
+        assert_eq!(catalog.list_providers().len(), 44);
     }
 
     #[test]
